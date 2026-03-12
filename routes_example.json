@@ -1,0 +1,34 @@
+[
+  {
+    "origin_code": "CNSHA",
+    "origin_name": "Shanghai",
+    "origin_country": "CN",
+    "destination_code": "NLRTM",
+    "destination_name": "Rotterdam",
+    "destination_country": "NL"
+  },
+  {
+    "origin_code": "CNSHA",
+    "origin_name": "Shanghai",
+    "origin_country": "CN",
+    "destination_code": "DEHAM",
+    "destination_name": "Hamburg",
+    "destination_country": "DE"
+  },
+  {
+    "origin_code": "CNSHA",
+    "origin_name": "Shanghai",
+    "origin_country": "CN",
+    "destination_code": "USNYC",
+    "destination_name": "New York",
+    "destination_country": "US"
+  },
+  {
+    "origin_code": "CNSHA",
+    "origin_name": "Shanghai",
+    "origin_country": "CN",
+    "destination_code": "USLAX",
+    "destination_name": "Los Angeles",
+    "destination_country": "US"
+  }
+]

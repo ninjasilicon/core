@@ -1,0 +1,14 @@
+# Maersk Schedule Scraper dependencies
+# Install with: pip install -r requirements-maersk.txt
+# Then run: playwright install chromium
+
+# Browser automation
+playwright>=1.44.0
+
+# Database ORM
+SQLAlchemy>=2.0.0
+PyMySQL>=1.1.0          # MySQL/MariaDB driver
+cryptography>=42.0.0    # Required by PyMySQL for auth plugins
+
+# CLI
+click>=8.1.0
