@@ -1,0 +1,123 @@
+name: Maersk Schedule Scraper
+
+on:
+  # ── Manual trigger desde la UI de GitHub ─────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      origin_code:
+        description: "Código del puerto origen (ej: CNSHA)"
+        required: true
+        default: "CNSHA"
+      origin_name:
+        description: "Nombre del puerto origen"
+        required: false
+        default: "Shanghai"
+      destination_code:
+        description: "Código del puerto destino (ej: NLRTM)"
+        required: true
+        default: "NLRTM"
+      destination_name:
+        description: "Nombre del puerto destino"
+        required: false
+        default: "Rotterdam"
+      departure_date:
+        description: "Fecha de salida (YYYY-MM-DD)"
+        required: true
+        default: "2025-05-01"
+      save_to_db:
+        description: "Guardar en base de datos MySQL (requiere secrets DB_*)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+  # ── Ejecución programada: todos los lunes a las 06:00 UTC ─────────────────
+  # Descomenta las siguientes líneas para activar el cron:
+  # schedule:
+  #   - cron: "0 6 * * 1"
+
+jobs:
+  scrape:
+    name: "Scrape: ${{ inputs.origin_code || 'CNSHA' }} → ${{ inputs.destination_code || 'NLRTM' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python ─────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-maersk.txt
+
+      # ── 3. Dependencias Python ────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install -r requirements-maersk.txt
+
+      # ── 4. Playwright + Chromium ──────────────────────────────────────────
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      # ── 5. Determinar si guardar en BD ────────────────────────────────────
+      - name: Configure database
+        id: db_config
+        run: |
+          SAVE="${{ inputs.save_to_db }}"
+          if [ "$SAVE" = "true" ] && [ -n "${{ secrets.DB_HOST }}" ]; then
+            echo "db_url=mysql+pymysql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT || '3306' }}/${{ secrets.DB_NAME }}?charset=utf8mb4" >> $GITHUB_OUTPUT
+            echo "no_save_flag=" >> $GITHUB_OUTPUT
+            echo "Using MySQL: ${{ secrets.DB_HOST }}/${{ secrets.DB_NAME }}"
+          else
+            echo "db_url=sqlite:///maersk_schedules.db" >> $GITHUB_OUTPUT
+            echo "no_save_flag=" >> $GITHUB_OUTPUT
+            echo "Using SQLite (local, resultados en artifacts)"
+          fi
+
+      # ── 6. Inicializar BD ─────────────────────────────────────────────────
+      - name: Initialise database tables
+        env:
+          DB_URL: ${{ steps.db_config.outputs.db_url }}
+          HEADLESS: "true"
+        run: python -m maersk_scraper init-db
+
+      # ── 7. Ejecutar scraper ───────────────────────────────────────────────
+      - name: Run schedule search
+        env:
+          DB_URL: ${{ steps.db_config.outputs.db_url }}
+          HEADLESS: "true"
+          BROWSER_TIMEOUT_MS: "90000"
+          RESULTS_WAIT_MS: "10000"
+        run: |
+          python -m maersk_scraper search \
+            --origin "${{ inputs.origin_code || 'CNSHA' }}" \
+            --origin-name "${{ inputs.origin_name || 'Shanghai' }}" \
+            --destination "${{ inputs.destination_code || 'NLRTM' }}" \
+            --destination-name "${{ inputs.destination_name || 'Rotterdam' }}" \
+            --date "${{ inputs.departure_date || '2025-05-01' }}"
+
+      # ── 8. Guardar la BD SQLite como artifact (si se usó SQLite) ──────────
+      - name: Upload SQLite database artifact
+        if: ${{ inputs.save_to_db != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schedules-sqlite-${{ github.run_id }}
+          path: maersk_schedules.db
+          retention-days: 7
+
+      # ── 9. Mostrar resultados guardados ───────────────────────────────────
+      - name: Show stored schedules
+        if: always()
+        env:
+          DB_URL: ${{ steps.db_config.outputs.db_url }}
+        run: |
+          python -m maersk_scraper show \
+            --origin "${{ inputs.origin_code || 'CNSHA' }}" \
+            --destination "${{ inputs.destination_code || 'NLRTM' }}" \
+            --limit 20 || true

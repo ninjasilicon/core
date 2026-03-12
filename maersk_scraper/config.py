@@ -41,7 +41,14 @@ class Config:
 
     @property
     def database_url(self) -> str:
-        """SQLAlchemy connection URL for MySQL/MariaDB."""
+        """SQLAlchemy connection URL.
+
+        Set DB_URL directly to override (e.g. sqlite:///schedules.db for testing).
+        Otherwise builds a MySQL/MariaDB URL from the individual DB_* variables.
+        """
+        explicit = os.getenv("DB_URL", "")
+        if explicit:
+            return explicit
         return (
             f"mysql+pymysql://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"

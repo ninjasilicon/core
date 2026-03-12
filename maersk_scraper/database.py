@@ -15,12 +15,25 @@ logger = logging.getLogger(__name__)
 
 
 def create_db_engine(config: Config):
-    """Create a SQLAlchemy engine with sensible pool settings."""
+    """Create a SQLAlchemy engine.
+
+    SQLite (used in CI/testing) does not support pool_size/max_overflow,
+    so we detect it and use NullPool instead.
+    """
+    url = config.database_url
+    if url.startswith("sqlite"):
+        from sqlalchemy.pool import StaticPool
+        return create_engine(
+            url,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+            echo=False,
+        )
     return create_engine(
-        config.database_url,
+        url,
         pool_size=5,
         max_overflow=10,
-        pool_pre_ping=True,  # verify connections before using them
+        pool_pre_ping=True,
         echo=False,
     )
 
@@ -36,10 +49,14 @@ def init_db(config: Config) -> sessionmaker:
     """
     engine = create_db_engine(config)
 
-    # Verify we can connect before proceeding
+    # Verify connectivity (skip verbose host/port log for SQLite)
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    logger.info("Database connection OK — %s:%s/%s", config.db_host, config.db_port, config.db_name)
+    url = config.database_url
+    if url.startswith("sqlite"):
+        logger.info("Database connection OK — %s", url)
+    else:
+        logger.info("Database connection OK — %s:%s/%s", config.db_host, config.db_port, config.db_name)
 
     Base.metadata.create_all(engine)
     logger.info("Tables verified / created.")
